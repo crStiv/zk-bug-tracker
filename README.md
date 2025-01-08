@@ -39,6 +39,7 @@ If you would like to add a "bug in the wild" or a "common vulnerability", there 
  24. [Zendoo: Missing Polynomial Normalization after Arithmetic Operations](#zendoo-polynomial-1)
  25. [Aleo: Non-Committing Encryption Used in InputID::Private](#aleo-encryption-1)
  26. [Light Protocol: Modification of shared state is not an atomic operation](#light-protocol-1)
+ 27. [Data Validation Vulnerabilities](#data-validation)
 
 #### [Common Vulnerabilities](#common-vulnerabilities-header)
 
@@ -1585,6 +1586,88 @@ Also, remove the assignment in lines 65–66 of src/poseidon_merkle_tree/instruc
 2. [Github Fix](https://github.com/Lightprotocol/light-protocol-v1/tree/main)
 3. [Fix Commit1](https://github.com/Lightprotocol/light-protocol/commit/870c07ce9223b696a6dee7dc8b93175d5d8d4260)
 4. [Fix Commit2](https://github.com/Lightprotocol/light-protocol-onchain/commit/b85065422456f743f492d2560b6429396a9eee19)
+
+## <a name="data-validation">9. Data Validation Vulnerabilities</a>
+
+Data validation vulnerabilities in ZK circuits occur when input parameters are not properly validated before being used in computations. This can lead to various issues including proof forgery, circuit manipulation, and security bypasses.
+
+**Common Issues:**
+
+1. Missing Range Checks
+- Not verifying that inputs are within expected bounds
+- Not checking for negative values when only positive values are valid
+- Not validating that values are less than the field modulus
+
+2. Incomplete Parameter Validation
+- Not validating all components of composite inputs
+- Missing validation of relationship between multiple inputs
+- Insufficient validation of array lengths or buffer sizes
+
+3. Edge Case Handling
+- Not handling zero values correctly
+- Missing validation for boundary conditions
+- Improper handling of special cases
+
+**Attack Scenario**
+
+Consider a circuit that processes user deposits:
+
+```circom
+template ProcessDeposit() {
+    signal input amount;
+    signal input fee;
+    signal output finalAmount;
+    
+    // Vulnerable: no validation that fee <= amount
+    finalAmount <== amount - fee;
+}
+```
+
+An attacker could set `fee > amount`, causing an underflow and potentially creating tokens from nothing.
+
+**Preventative Techniques**
+
+1. Always add range checks for numerical inputs:
+```circom
+component rangeCheck = Num2Bits(64); // Ensures input < 2^64
+rangeCheck.in <== amount;
+```
+
+2. Validate relationships between inputs:
+```circom
+component ltCheck = LessThan(64);
+ltCheck.in[0] <== fee;
+ltCheck.in[1] <== amount;
+ltCheck.out === 1; // Ensures fee < amount
+```
+
+3. Add explicit checks for edge cases:
+```circom
+component isZero = IsZero();
+isZero.in <== amount;
+isZero.out === 0; // Ensures amount != 0
+```
+
+4. Document validation requirements clearly in comments:
+```circom
+// amount must be > 0 and < 2^64
+// fee must be < amount
+template SafeProcessDeposit() {
+    ...
+}
+```
+
+**Real World Examples**
+
+1. [Aleo: Non-Committing Encryption Used in InputID::Private](#aleo-encryption-1)
+2. [Light Protocol: Modification of shared state](#light-protocol-1)
+
+These vulnerabilities demonstrate how insufficient input validation can lead to serious security issues in production systems.
+
+**References**
+
+1. [ZK Security Handbook - Input Validation](https://www.zkdocs.com/docs/zkdocs/security/input-validation/)
+2. [Common Pitfalls in Circuit Development](https://github.com/privacy-scaling-explorations/zkevm-circuits/wiki/Common-pitfalls-in-circuit-development)
 
 # <a name="common-vulnerabilities-header">Common Vulnerabilities</a>
 
